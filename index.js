@@ -16,6 +16,10 @@ const app = express();
 // ];
 app.use(cors(corsConfig));
 
+// app.use(cors({
+//   origin: '*'
+// }));
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(cookieParser(process.env.COOKIE_SECRET));
@@ -41,7 +45,7 @@ app.use("/api/user", require("./routes/user"));
 app.use("/api/films", require("./routes/films"));
 app.use("/api/categories", require("./routes/categories"));
 app.use("/api/subscription", require("./routes/subscription"));
-// app.use("/api/file", require("./routes/file"));
+app.use("/api/file", require("./routes/file"));
 
 // app.use("/", require("./routes/dumpData"));
 

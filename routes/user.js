@@ -55,6 +55,7 @@ Router.get("/", authUser, async (req, res) => {
 Router.post("/auth", async (req, res) => {
   try {
     const { userEmail, userPassword } = req.body;
+    console.log(req.body);
 
     // Simple validation
     if (!userEmail || !userPassword) {
