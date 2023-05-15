@@ -12,19 +12,18 @@ const authUser = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { id, lastChangePw } = decoded;
-    const user = await User.findById(id);
-
-    if (user.lastChangePw.toString() !== lastChangePw) {
-      return res
-        .status(401)
-        .clearCookie("tokenUser", {
-          sameSite: "none",
-          secure: true,
-        })
-        .json({
-          msg: "Mật khẩu đã bị thay đổi",
-        });
-    }
+    // const user = await User.findById(id);
+    // if (user.lastChangePw.toString() !== lastChangePw) {
+    //   return res
+    //     .status(401)
+    //     .clearCookie("tokenUser", {
+    //       sameSite: "none",
+    //       secure: true,
+    //     })
+    //     .json({
+    //       msg: "Mật khẩu đã bị thay đổi",
+    //     });
+    // }
 
     // Add admin from payload
     req.userId = id;

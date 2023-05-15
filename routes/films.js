@@ -96,7 +96,7 @@ Router.get("/filter", async (req, res) => {
 // @route POST films recent
 // @desc POST Films Recent
 // @access Private
-Router.post("/recent", async (req, res) => {
+Router.post("/recent", authUser, async (req, res) => {
   try {
     const { history } = req.body;
     const listIdFilm = history.map((item) =>
