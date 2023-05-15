@@ -96,7 +96,7 @@ Router.get("/filter", async (req, res) => {
 // @route POST films recent
 // @desc POST Films Recent
 // @access Private
-Router.post("/recent", authUser, async (req, res) => {
+Router.post("/recent", async (req, res) => {
   try {
     const { history } = req.body;
     const listIdFilm = history.map((item) =>
@@ -188,55 +188,55 @@ Router.patch("/:slug", upload2, async (req, res) => {
     } = req.body;
     
     console.log(123123123, req.body);
-    // if (images) {
-    //   if (
-    //     !title ||
-    //     !trailerURL ||
-    //     !description ||
-    //     !genre ||
-    //     !titleSearch ||
-    //     !filmURL
-    //   ) {
-    //     return res.status(400).json({
-    //       msg: "Vui lòng điền vào ô trống",
-    //     });
-    //   }
-    //   if (isUpload) {
-    //     let file_urls = [];
-    //     for (let file of images) {
-    //       if (file) {
-    //         const response = await createUploader(file);
-    //         file_urls.push(response.secure_url);
-    //       } else {
-    //         file_urls.push(file);
-    //       }
-    //     }
+    if (images) {
+      if (
+        !title ||
+        !trailerURL ||
+        !description ||
+        !genre ||
+        !titleSearch ||
+        !filmURL
+      ) {
+        return res.status(400).json({
+          msg: "Vui lòng điền vào ô trống",
+        });
+      }
+      if (isUpload) {
+        let file_urls = [];
+        for (let file of images) {
+          if (file) {
+            const response = await createUploader(file);
+            file_urls.push(response.secure_url);
+          } else {
+            file_urls.push(file);
+          }
+        }
 
-    //     updateFilm(req, res, file_urls[0], file_urls[1]);
-    //   } else {
-    //     updateFilm(req, res, images[0], images[1]);
-    //   }
-    // } else {
-    //   let infoFilm = {
-    //     reviews,
-    //     softDelete,
-    //   };
+        updateFilm(req, res, file_urls[0], file_urls[1]);
+      } else {
+        updateFilm(req, res, images[0], images[1]);
+      }
+    } else {
+      let infoFilm = {
+        reviews,
+        softDelete,
+      };
 
-    //   for (let prop in infoFilm) {
-    //     if (typeof infoFilm[prop] === "undefined") {
-    //       delete infoFilm[prop];
-    //     }
-    //   }
+      for (let prop in infoFilm) {
+        if (typeof infoFilm[prop] === "undefined") {
+          delete infoFilm[prop];
+        }
+      }
 
-    //   const updateFilm = await Film.findOneAndUpdate(
-    //     { slug: req.params.slug },
-    //     infoFilm,
-    //     {
-    //       new: true,
-    //     }
-    //   );
-    //   await res.json(updateFilm);
-    // }
+      const updateFilm = await Film.findOneAndUpdate(
+        { slug: req.params.slug },
+        infoFilm,
+        {
+          new: true,
+        }
+      );
+      await res.json(updateFilm);
+    }
   } catch (err) {
     console.log(err);
   }
