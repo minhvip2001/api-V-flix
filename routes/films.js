@@ -2,19 +2,11 @@ const express = require("express");
 const Film = require("../models/Film");
 const { addFilm, updateFilm } = require("../utils/addOrUpdateFilm");
 const Router = express.Router();
-const cloudinary = require("../utils/cloudinary");
 const mongoose = require("mongoose");
 const authUser = require("../middlewares/authUser");
 const authAdmin = require("../middlewares/authAdmin");
 const upload = require("../utils/multer");
 const multer = require("multer");
-const createUploader = async (file) => {
-  return await cloudinary.uploader.upload(file, {
-    upload_preset: "vmoflix_list_films",
-    format: "webp",
-  });
-};
-
 const upload2 = multer({ storage: multer.memoryStorage() }).array('files', 10);
 
 // @route GET amount films
@@ -125,7 +117,7 @@ Router.post("/recent", authUser, async (req, res) => {
 // @route POST film
 // @desc Create A New Film
 // @access Public
-Router.post("/", async (req, res) => {
+Router.post("/", upload.fields([{ name: 'posterImage' }, { name: 'bannerImage' }]), async (req, res) => {
   try {
     const {
       title,
@@ -133,35 +125,49 @@ Router.post("/", async (req, res) => {
       filmURL,
       description,
       genre,
-      images,
-      isUpload,
+      actor,
       titleSearch,
     } = req.body;
+    const {
+      posterImage,
+      bannerImage,
+    } = req.files;
 
-    if (
-      !title ||
-      !trailerURL ||
-      !description ||
-      !genre ||
-      !titleSearch ||
-      !filmURL
-    ) {
+    const missingParams = [];
+
+    if (!title) {
+      missingParams.push('title');
+    }
+    if (!trailerURL) {
+      missingParams.push('trailerURL');
+    }
+    if (!filmURL) {
+      missingParams.push('filmURL');
+    }
+    if (!description) {
+      missingParams.push('description');
+    }
+    if (!genre) {
+      missingParams.push('genre');
+    }
+    if (!actor) {
+      missingParams.push('actor');
+    }
+    if (!posterImage) {
+      missingParams.push('posterImage');
+    }
+    if (!bannerImage) {
+      missingParams.push('bannerImage');
+    }
+    if (!titleSearch) {
+      missingParams.push('titleSearch');
+    }
+    if (missingParams.length > 0) {
       return res.status(400).json({
-        msg: "Vui lòng điền vào ô trống",
+        error: `Missing parameters: ${missingParams.join(', ')}`,
       });
     }
-    if (isUpload) {
-      let file_urls = [];
-
-      for (let file of images) {
-        const response = await createUploader(file);
-        file_urls.push(response);
-      }
-
-      addFilm(req, res, file_urls[0].secure_url, file_urls[1].secure_url);
-    } else {
-      addFilm(req, res, images[0], images[1]);
-    }
+    addFilm(req, res);
   } catch (err) {
     console.log(err);
   }

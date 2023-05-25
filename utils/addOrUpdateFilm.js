@@ -1,7 +1,8 @@
 const Film = require("../models/Film");
-const uploadFilm = require("../utils/upload");
+const upload = require("../utils/upload");
+const url = require('url');
 
-const addFilm = (req, res, poster, banner) => {
+const addFilm = (req, res) => {
   const {
     title,
     trailerURL,
@@ -10,28 +11,28 @@ const addFilm = (req, res, poster, banner) => {
     genre,
     actor,
     titleSearch,
-    slug,
   } = req.body;
-  let film_url = uploadFilm(filmURL);
-  let trailer_url = uploadFilm(trailerURL);
+  upload.uploadFilm(filmURL);
+  upload.uploadFilm(trailerURL);
+  const fullUrl = url.format({
+    protocol: req.protocol,
+    host: req.headers.host,
+    pathname: "/"
+  });
+  let poster_image = req.files['posterImage'][0];
+  let banner_mage = req.files['bannerImage'][0];
+  const folderPath = 'uploads/films/';
   let infoFilm = {
-    title,
-    trailerURL: trailer_url,
-    filmURL: film_url,
-    description,
-    genre,
-    actor,
-    posterFilm: poster,
-    bannerFilm: banner,
-    titleSearch,
-    slug,
+    title: title,
+    trailerURL: fullUrl + folderPath + upload.getNameFilm(trailerURL) + '.mp4',
+    filmURL: fullUrl + folderPath + upload.getNameFilm(filmURL) + '.mp4',
+    description: description,
+    genre: genre,
+    actor: actor,
+    posterFilm: fullUrl + poster_image.destination + poster_image.filename,
+    bannerFilm: fullUrl + banner_mage.destination + banner_mage.filename,
+    titleSearch: titleSearch,
   };
-
-  for (let prop in infoFilm) {
-    if (!infoFilm[prop]) {
-      delete infoFilm[prop];
-    }
-  }
 
   const newFilm = new Film(infoFilm);
 
