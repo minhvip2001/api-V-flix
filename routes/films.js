@@ -150,10 +150,8 @@ Router.post("/", async (req, res) => {
         msg: "Vui lòng điền vào ô trống",
       });
     }
-
     if (isUpload) {
       let file_urls = [];
-      console.log(123123123);
 
       for (let file of images) {
         const response = await createUploader(file);
@@ -186,8 +184,7 @@ Router.patch("/:slug", upload2, async (req, res) => {
       titleSearch,
       softDelete,
     } = req.body;
-    
-    console.log(123123123, req.body);
+
     if (images) {
       if (
         !title ||

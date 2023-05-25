@@ -1,4 +1,5 @@
 const Film = require("../models/Film");
+const uploadFilm = require("../utils/upload");
 
 const addFilm = (req, res, poster, banner) => {
   const {
@@ -11,10 +12,12 @@ const addFilm = (req, res, poster, banner) => {
     titleSearch,
     slug,
   } = req.body;
+  let film_url = uploadFilm(filmURL);
+  let trailer_url = uploadFilm(trailerURL);
   let infoFilm = {
     title,
-    trailerURL,
-    filmURL,
+    trailerURL: trailer_url,
+    filmURL: film_url,
     description,
     genre,
     actor,
