@@ -20,7 +20,6 @@ const addFilm = (req, res) => {
     pathname: "/"
   });
   let poster_image = req.files['posterImage'][0];
-  let banner_mage = req.files['bannerImage'][0];
   const folderPath = 'uploads/films/';
   let infoFilm = {
     title: title,

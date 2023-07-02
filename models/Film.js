@@ -16,19 +16,7 @@ const FilmSchema = new Schema({
     type: String,
     unique: true,
   },
-  posterFilm: {
-    type: String,
-    required: true,
-  },
-  bannerFilm: {
-    type: String,
-    required: true,
-  },
-  trailerURL: {
-    type: String,
-    required: true,
-  },
-  filmURL: {
+  poster: {
     type: String,
     required: true,
   },
@@ -37,21 +25,25 @@ const FilmSchema = new Schema({
     required: true,
   },
   actor: {
-    type: Array,
+    type: [String],
     default: [],
   },
   genre: {
-    type: Array,
+    type: [String],
     required: true,
   },
   reviews: {
-    type: Array,
+    type: [Number],
     default: [],
   },
   softDelete: {
     type: Boolean,
     default: false,
   },
+  episodes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Episode'
+  }],
   date: {
     type: Date,
     default: Date.now,

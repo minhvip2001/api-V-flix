@@ -1,13 +1,13 @@
 const express = require("express");
 const Film = require("../models/Film");
+const Episode = require("../models/Episode");
 const { addFilm, updateFilm } = require("../utils/addOrUpdateFilm");
 const Router = express.Router();
 const mongoose = require("mongoose");
 const authUser = require("../middlewares/authUser");
 const authAdmin = require("../middlewares/authAdmin");
-const upload = require("../utils/multer");
-const multer = require("multer");
-const upload2 = multer({ storage: multer.memoryStorage() }).array('files', 10);
+const slugify = require('slugify');
+
 
 // @route GET amount films
 // @desc Get Amount Films
@@ -117,66 +117,97 @@ Router.post("/recent", authUser, async (req, res) => {
 // @route POST film
 // @desc Create A New Film
 // @access Public
-Router.post("/", upload.fields([{ name: 'posterImage' }, { name: 'bannerImage' }]), async (req, res) => {
+Router.post("/", (req, res) => {
   try {
-    const {
-      title,
-      trailerURL,
-      filmURL,
-      description,
-      genre,
-      actor,
-      titleSearch,
-    } = req.body;
-    const {
-      posterImage,
-      bannerImage,
-    } = req.files;
+    const film = {
+      'title': req.body.title,
+      'poster': req.body.poster,
+      'description': req.body.description,
+      'genre': req.body.genre,
+      'actor': req.body.actor,
+      'episodes': req.body.episodes,
+    }
 
-    const missingParams = [];
+    const missingParams = [
 
-    if (!title) {
-      missingParams.push('title');
+    ];
+
+    const requiredFilmKeys = [
+      'title',
+      'description',
+      'poster',
+      'genre',
+      'actor',
+      'episodes'
+    ];
+
+    const requiredEpisodeKeys = [
+      'title',
+      'description',
+      'episode',
+      'poster',
+      'video',
+    ];
+
+    for (let key of requiredFilmKeys) {
+      if (!req.body.hasOwnProperty(key)) {
+        missingParams.push(key);
+      }
     }
-    if (!trailerURL) {
-      missingParams.push('trailerURL');
+
+    for (let index = 0; index < req.body.episodes.length; index++) {
+      for (let key of requiredEpisodeKeys) {
+        if (!req.body.episodes[index].hasOwnProperty(key)) {
+          let error = key + '[' + index + ']';
+          missingParams.push(error);
+        }
+      }
     }
-    if (!filmURL) {
-      missingParams.push('filmURL');
-    }
-    if (!description) {
-      missingParams.push('description');
-    }
-    if (!genre) {
-      missingParams.push('genre');
-    }
-    if (!actor) {
-      missingParams.push('actor');
-    }
-    if (!posterImage) {
-      missingParams.push('posterImage');
-    }
-    if (!bannerImage) {
-      missingParams.push('bannerImage');
-    }
-    if (!titleSearch) {
-      missingParams.push('titleSearch');
-    }
+
     if (missingParams.length > 0) {
       return res.status(400).json({
         error: `Missing parameters: ${missingParams.join(', ')}`,
       });
     }
-    addFilm(req, res);
+
+    const newFilm = new Film({
+      title: film.title,
+      titleSearch: film.title,
+      poster: film.poster,
+      description: film.description,
+      actor: film.actor,
+      genre: film.genre,
+    });
+
+    const options = {
+      lower: true,
+      strict: true,
+    };
+    const newEpisodes = film.episodes.map(episode => {
+      let slug = film.title + " " + episode.episode
+      episode.slug = slugify(slug, options);
+      return new Episode({
+        ...episode,
+        slug,
+        film: newFilm._id
+      });
+    });
+
+    Episode.insertMany(newEpisodes)
+      .then((insertedEpisodes) => {
+        newFilm.episodes = insertedEpisodes.map(ep => ep._id);
+        return newFilm.save();
+      })
+      .then(() => res.json(newFilm))
   } catch (err) {
-    console.log(err);
+    res.json(err);
   }
 });
 
 // @route PATCH film
 // @desc UPDATE A Film
 // @access Public
-Router.patch("/:slug", upload2, async (req, res) => {
+Router.patch("/:slug", async (req, res) => {
   try {
     const {
       title,
