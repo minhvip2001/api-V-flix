@@ -24,7 +24,10 @@ Router.get("/", async (req, res) => {
   try {
     const { slug } = req.query;
 
-    const film = await Film.findOne({ slug, softDelete: false });
+    const film = await Film.findOne({ slug }).populate('episodes');
+    if (!film) {
+      return res.status(404).json({ message: 'Film not found' });
+  }
     res.json(film);
   } catch (err) {
     console.log(err);
@@ -183,12 +186,12 @@ Router.post("/", (req, res) => {
       lower: true,
       strict: true,
     };
+    let slug = ""
     const newEpisodes = film.episodes.map(episode => {
-      let slug = film.title + " " + episode.episode
-      episode.slug = slugify(slug, options);
+      slug = episode.title + " " + episode.episode
       return new Episode({
         ...episode,
-        slug,
+        slug: slugify(slug, options),
         film: newFilm._id
       });
     });
