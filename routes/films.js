@@ -33,9 +33,9 @@ Router.get("/", addFullUrl, async (req, res) => {
   try {
     const { slug } = req.query;
 
-    const film = await Film.findOne({slug: slug})
-    .populate('episodes')
-    .exec();
+    const film = await Film.findOne({ slug: slug })
+      .populate('episodes')
+      .exec();
 
     if (!film) {
       return res.status(404).json({ error: 'Film not found' });
@@ -275,7 +275,7 @@ Router.post("/", addFullUrl, async (req, res) => {
     newFilm.episodes = newEpisodes.map((ep) => ep._id);
     await newFilm.save();
     await newFilm.populate('episodes').execPopulate();
-    
+
     newFilm.poster = `${req.fullUrl}/${newFilm.poster}`;
     newFilm.episodes.forEach((episode) => {
       episode.poster = `${req.fullUrl}/${episode.poster}`;
@@ -368,11 +368,43 @@ Router.patch("/:id", async (req, res) => {
 // @route DELETE film
 // @desc Remove A Film
 // @access Public
-Router.delete("/:slug", async (req, res) => {
+Router.delete("/:id", async (req, res) => {
   try {
-    const film = await Film.findOne({ slug: req.params.slug });
-    await film.deleteOne();
-    res.json({ success: true });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.error(`Invalid film ID: ${req.params.id}`);
+      return res.status(400).json({ error: `Invalid film ID: ${req.params.id}` });
+    }
+
+    const film = await Film.findById(req.params.id).populate("episodes");
+
+    if (!film) {
+      return res.status(404).json({ error: 'Film not found' });
+    }
+
+    if (film.poster) {
+      // Remove the old poster image file
+      if (fs.existsSync(path.join(film.poster))) {
+        await unlinkAsync(path.join(film.poster));
+      }
+    }
+
+
+    // Remove the old video file
+    film.episodes.forEach((episode) => {
+      if (fs.existsSync(path.join(episode.poster))) {
+        unlinkAsync(path.join(episode.poster));
+      }
+      if (fs.existsSync(path.join(episode.video))) {
+        unlinkAsync(path.join(episode.video));
+      }
+    });
+
+    // Remove related episodes
+    await Episode.deleteMany({ film: film._id });
+
+    // Remove film
+    await film.remove();
+    return res.json({ message: 'Delete movie successfully' });
   } catch (err) {
     res.status(400).json({ success: false, err });
   }
