@@ -1,7 +1,7 @@
 const express = require("express");
 const Film = require("../models/Film");
 const Episode = require("../models/Episode");
-const { addFilm, updateFilm } = require("../utils/addOrUpdateFilm");
+const addFullUrl = require("../utils/url");
 const Router = express.Router();
 const mongoose = require("mongoose");
 const authUser = require("../middlewares/authUser");
@@ -13,6 +13,10 @@ const { v4: uuidv4 } = require('uuid');
 const ytdl = require('ytdl-core');
 const filmPath = path.join('uploads', 'films');
 const https = require('https');
+const { promisify } = require('util');
+
+
+const unlinkAsync = promisify(fs.unlink);
 
 // @route GET amount films
 // @desc Get Amount Films
@@ -25,14 +29,24 @@ Router.get("/amount", authAdmin, async (req, res) => {
 // @route GET film
 // @desc Get A Film
 // @access Public
-Router.get("/", async (req, res) => {
+Router.get("/", addFullUrl, async (req, res) => {
   try {
     const { slug } = req.query;
 
-    const film = await Film.findOne({ slug }).populate('episodes');
+    const film = await Film.findOne({slug: slug})
+    .populate('episodes')
+    .exec();
+
     if (!film) {
-      return res.status(404).json({ message: 'Film not found' });
+      return res.status(404).json({ error: 'Film not found' });
     }
+
+    film.poster = `${req.fullUrl}/${film.poster}`;
+    film.episodes.forEach((episode) => {
+      episode.poster = `${req.fullUrl}/${episode.poster}`;
+      episode.video = `${req.fullUrl}/${episode.video}`;
+    });
+
     res.json(film);
   } catch (err) {
     console.log(err);
@@ -125,7 +139,7 @@ Router.post("/recent", authUser, async (req, res) => {
 // @route POST film
 // @desc Create A New Film
 // @access Public
-Router.post("/", async (req, res) => {
+Router.post("/", addFullUrl, async (req, res) => {
   try {
     const film = {
       'title': req.body.title,
@@ -185,7 +199,6 @@ Router.post("/", async (req, res) => {
     if (existingFilm) {
       return res.status(400).json({ error: `Film with title '${title}' already exists` });
     }
-    const fullUrl = `${req.protocol}://${req.headers.host}`;
 
     const posterExt = film.poster.substring(
       "data:image/".length,
@@ -208,7 +221,7 @@ Router.post("/", async (req, res) => {
     const newFilm = await Film.create({
       title: film.title,
       titleSearch: film.title,
-      poster: `${fullUrl}/${posterFilename}`,
+      poster: posterPath,
       description: film.description,
       actor: film.actor,
       genre: film.genre,
@@ -219,10 +232,12 @@ Router.post("/", async (req, res) => {
         // Download video
         const episodeVideoInfo = await ytdl.getInfo(episode.video);
         const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url
-        const episodeThumbnailName = `thumbnail-${uuidv4()}.jpg`;
+        const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
         const episodeThumbnail = path.join(filmPath, episodeThumbnailName);
         https.get(episodeThumbnailUrl, (response) => {
-          response.pipe(fs.createWriteStream(episodeThumbnail));
+          response.pipe(fs.createWriteStream(episodeThumbnail, {
+            format: "png",
+          }));
         });
         const episodeTitle = slugify(episode.title, {
           lower: true,
@@ -245,11 +260,11 @@ Router.post("/", async (req, res) => {
             console.error(`Error downloading file: ${err}`);
           });
 
-        const slug = `${episode.title} ${episode.episode}`;
+        const slug = `${film.title} ${episode.title} ${episode.episode}`;
         const newEpisode = await Episode.create({
           ...episode,
-          poster: `${fullUrl}/${episodeThumbnail}`,
-          video: `${fullUrl}/${videoFilename}`,
+          poster: episodeThumbnail,
+          video: videoPath,
           slug: slugify(slug, { lower: true, strict: true }),
           film: newFilm._id,
         });
@@ -259,6 +274,13 @@ Router.post("/", async (req, res) => {
 
     newFilm.episodes = newEpisodes.map((ep) => ep._id);
     await newFilm.save();
+    await newFilm.populate('episodes').execPopulate();
+    
+    newFilm.poster = `${req.fullUrl}/${newFilm.poster}`;
+    newFilm.episodes.forEach((episode) => {
+      episode.poster = `${req.fullUrl}/${episode.poster}`;
+      episode.video = `${req.fullUrl}/${episode.video}`;
+    });
     res.json(newFilm);
   } catch (err) {
     console.error(err);
@@ -269,72 +291,77 @@ Router.post("/", async (req, res) => {
 // @route PATCH film
 // @desc UPDATE A Film
 // @access Public
-Router.patch("/:slug", async (req, res) => {
+Router.patch("/:id", async (req, res) => {
   try {
-    const {
-      title,
-      trailerURL,
-      filmURL,
-      description,
-      genre,
-      images,
-      reviews,
-      isUpload,
-      titleSearch,
-      softDelete,
-    } = req.body;
+    const updates = Object.keys(req.body);
+    const allowedUpdates = [
+      "title",
+      "description",
+      "poster",
+      "genre",
+      "actor",
+    ];
+    const invalidUpdates = updates.filter((update) =>
+      !allowedUpdates.includes(update)
+    );
 
-    if (images) {
-      if (
-        !title ||
-        !trailerURL ||
-        !description ||
-        !genre ||
-        !titleSearch ||
-        !filmURL
-      ) {
-        return res.status(400).json({
-          msg: "Vui lòng điền vào ô trống",
-        });
-      }
-      if (isUpload) {
-        let file_urls = [];
-        for (let file of images) {
-          if (file) {
-            const response = await createUploader(file);
-            file_urls.push(response.secure_url);
-          } else {
-            file_urls.push(file);
-          }
-        }
-
-        updateFilm(req, res, file_urls[0], file_urls[1]);
-      } else {
-        updateFilm(req, res, images[0], images[1]);
-      }
-    } else {
-      let infoFilm = {
-        reviews,
-        softDelete,
-      };
-
-      for (let prop in infoFilm) {
-        if (typeof infoFilm[prop] === "undefined") {
-          delete infoFilm[prop];
-        }
-      }
-
-      const updateFilm = await Film.findOneAndUpdate(
-        { slug: req.params.slug },
-        infoFilm,
-        {
-          new: true,
-        }
-      );
-      await res.json(updateFilm);
+    if (invalidUpdates.length > 0) {
+      return res.status(400).json({ error: "Invalid updates", invalidFields: invalidUpdates, allowUpdateFields: allowedUpdates });
     }
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.error(`Invalid film ID: ${req.params.id}`);
+      return res.status(400).json({ error: `Invalid film ID: ${req.params.id}` });
+    }
+
+    const film = await Film.findById(req.params.id);
+
+    if (!film) {
+      return res.status(404).json({ error: 'Film not found' });
+    }
+
+    // Handle poster image upload
+    if (req.body.poster) {
+      // Remove the old poster image file
+      if (film.poster) {
+        if (fs.existsSync(path.join(film.poster))) {
+          await unlinkAsync(path.join(film.poster));
+        }
+      }
+
+      // Generate a new filename for the uploaded image
+      const posterExt = req.body.poster.substring(
+        "data:image/".length,
+        req.body.poster.indexOf(";base64")
+      );
+      const posterFilename = `${uuidv4()}.${posterExt}`;
+      const posterPath = path.join(filmPath, posterFilename);
+      const posterFilm = req.body.poster.split(";base64,").pop();
+
+      // Save the resized image to disk
+      const posterData = Buffer.from(posterFilm, 'base64');
+      fs.writeFile(posterPath, posterData, (err) => {
+        if (err) throw err;
+        console.log('Image Poster Film saved successfully');
+      });
+
+      // Update the film object with the new poster image path
+      req.body.poster = `${filmPath}/${posterFilename}`;
+    }
+
+    // Update the film object with the request body
+    Object.assign(film, req.body);
+
+    // Save the updated film object to the database
+    await film.save();
+
+    // Populate the episodes field and return the updated film object in the response
+    await film.populate('episodes').execPopulate();
+    res.json(film);
+
   } catch (err) {
     console.log(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
