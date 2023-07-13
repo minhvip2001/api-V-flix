@@ -7,7 +7,12 @@ const mongoose = require("mongoose");
 const authUser = require("../middlewares/authUser");
 const authAdmin = require("../middlewares/authAdmin");
 const slugify = require('slugify');
-
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const ytdl = require('ytdl-core');
+const filmPath = path.join('uploads', 'films');
+const https = require('https');
 
 // @route GET amount films
 // @desc Get Amount Films
@@ -27,7 +32,7 @@ Router.get("/", async (req, res) => {
     const film = await Film.findOne({ slug }).populate('episodes');
     if (!film) {
       return res.status(404).json({ message: 'Film not found' });
-  }
+    }
     res.json(film);
   } catch (err) {
     console.log(err);
@@ -120,7 +125,7 @@ Router.post("/recent", authUser, async (req, res) => {
 // @route POST film
 // @desc Create A New Film
 // @access Public
-Router.post("/", (req, res) => {
+Router.post("/", async (req, res) => {
   try {
     const film = {
       'title': req.body.title,
@@ -148,7 +153,7 @@ Router.post("/", (req, res) => {
       'title',
       'description',
       'episode',
-      'poster',
+      // 'poster',
       'video',
     ];
 
@@ -158,14 +163,15 @@ Router.post("/", (req, res) => {
       }
     }
 
-    for (let index = 0; index < req.body.episodes.length; index++) {
+    film.episodes.forEach((episode, index) => {
       for (let key of requiredEpisodeKeys) {
-        if (!req.body.episodes[index].hasOwnProperty(key)) {
-          let error = key + '[' + index + ']';
+        if (!episode.hasOwnProperty(key)) {
+          let episodeKey = Object.keys(film).slice(-1)[0];
+          let error = `${episodeKey}[${index}]['${key}']`;
           missingParams.push(error);
         }
       }
-    }
+    });
 
     if (missingParams.length > 0) {
       return res.status(400).json({
@@ -173,37 +179,90 @@ Router.post("/", (req, res) => {
       });
     }
 
-    const newFilm = new Film({
+    // Check tile film exists
+    const title = req.body.title;
+    const existingFilm = await Film.findOne({ title: title });
+    if (existingFilm) {
+      return res.status(400).json({ error: `Film with title '${title}' already exists` });
+    }
+    const fullUrl = `${req.protocol}://${req.headers.host}`;
+
+    const posterExt = film.poster.substring(
+      "data:image/".length,
+      film.poster.indexOf(";base64")
+    );
+    const posterFilename = `${uuidv4()}.${posterExt}`;
+    const posterPath = path.join(filmPath, posterFilename);
+    const posterFilm = film.poster.split(";base64,").pop();
+
+    // Create the uploads directory if it doesn't exist
+    if (!fs.existsSync(filmPath)) {
+      fs.mkdirSync(filmPath, { recursive: true });
+    }
+
+    await fs.promises.writeFile(posterPath, posterFilm, {
+      encoding: "base64",
+    });
+    console.log("Image Poster Film saved successfully");
+
+    const newFilm = await Film.create({
       title: film.title,
       titleSearch: film.title,
-      poster: film.poster,
+      poster: `${fullUrl}/${posterFilename}`,
       description: film.description,
       actor: film.actor,
       genre: film.genre,
     });
 
-    const options = {
-      lower: true,
-      strict: true,
-    };
-    let slug = ""
-    const newEpisodes = film.episodes.map(episode => {
-      slug = episode.title + " " + episode.episode
-      return new Episode({
-        ...episode,
-        slug: slugify(slug, options),
-        film: newFilm._id
-      });
-    });
+    const newEpisodes = await Promise.all(
+      film.episodes.map(async (episode, index) => {
+        // Download video
+        const episodeVideoInfo = await ytdl.getInfo(episode.video);
+        const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url
+        const episodeThumbnailName = `thumbnail-${uuidv4()}.jpg`;
+        const episodeThumbnail = path.join(filmPath, episodeThumbnailName);
+        https.get(episodeThumbnailUrl, (response) => {
+          response.pipe(fs.createWriteStream(episodeThumbnail));
+        });
+        const episodeTitle = slugify(episode.title, {
+          lower: true,
+          strict: true,
+        });
 
-    Episode.insertMany(newEpisodes)
-      .then((insertedEpisodes) => {
-        newFilm.episodes = insertedEpisodes.map(ep => ep._id);
-        return newFilm.save();
+        const videoFilename = `${episodeTitle}-${episode.episode}-${uuidv4()}.mp4`;
+        const videoPath = path.join(filmPath, videoFilename);
+        const videoStream = ytdl(episode.video);
+        videoStream
+          .pipe(fs.createWriteStream(videoPath, {
+            quality: "highest",
+            filter: "audioandvideo",
+            format: "mp4",
+          }))
+          .on('finish', function () {
+            console.log('Video film downloaded successfully');
+          })
+          .on("error", (err) => {
+            console.error(`Error downloading file: ${err}`);
+          });
+
+        const slug = `${episode.title} ${episode.episode}`;
+        const newEpisode = await Episode.create({
+          ...episode,
+          poster: `${fullUrl}/${episodeThumbnail}`,
+          video: `${fullUrl}/${videoFilename}`,
+          slug: slugify(slug, { lower: true, strict: true }),
+          film: newFilm._id,
+        });
+        return newEpisode;
       })
-      .then(() => res.json(newFilm))
+    );
+
+    newFilm.episodes = newEpisodes.map((ep) => ep._id);
+    await newFilm.save();
+    res.json(newFilm);
   } catch (err) {
-    res.json(err);
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
