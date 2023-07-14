@@ -42,6 +42,7 @@ Router.get("/", addFullUrl, async (req, res) => {
     }
 
     film.poster = `${req.fullUrl}/${film.poster}`;
+    film.episodes.sort((a, b) => (a.episode > b.episode) ? 1 : -1);
     film.episodes.forEach((episode) => {
       episode.poster = `${req.fullUrl}/${episode.poster}`;
       episode.video = `${req.fullUrl}/${episode.video}`;
