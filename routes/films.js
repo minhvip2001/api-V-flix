@@ -193,7 +193,7 @@ Router.post("/", addFullUrl, async (req, res) => {
       });
     }
 
-    // Check tile film exists
+    // Check title film exists
     const title = req.body.title;
     const existingFilm = await Film.findOne({ title: title });
     if (existingFilm) {

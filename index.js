@@ -43,6 +43,7 @@ app.use("/api/posts", require("./routes/posts"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/user", require("./routes/user"));
 app.use("/api/films", require("./routes/films"));
+app.use("/api/episodes", require("./routes/episode"));
 app.use("/api/categories", require("./routes/categories"));
 app.use("/api/subscription", require("./routes/subscription"));
 app.use("/api/file", require("./routes/file"));

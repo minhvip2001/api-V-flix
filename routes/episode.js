@@ -1,15 +1,22 @@
 const express = require("express");
 const Film = require("../models/Film");
 const Episode = require("../models/Episode");
+const addFullUrl = require("../utils/url");
 const Router = express.Router();
 const mongoose = require("mongoose");
 const slugify = require('slugify');
-
+const fs = require('fs');
+const axios = require('axios');
+const sharp = require('sharp');
+const ytdl = require('ytdl-core');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const filmPath = path.join('uploads', 'films');
 
 // @route Get Episode
-// @desc Get pisode
+// @desc Get Episode
 // @access Public
-Router.get("/", async (req, res) => {
+Router.get("/", addFullUrl, async (req, res) => {
     try {
         const { slug } = req.query;
         console.log(slug)
@@ -17,6 +24,9 @@ Router.get("/", async (req, res) => {
         if (!episode) {
             return res.status(404).json({ message: 'Episode not found' });
         }
+        episode.poster = `${req.fullUrl}/${episode.poster}`;
+        episode.video = `${req.fullUrl}/${episode.video}`;
+        episode.film.poster = `${req.fullUrl}/${episode.film.poster}`;
         res.json(episode);
     } catch (err) {
         res.json(err);
@@ -27,17 +37,17 @@ Router.get("/", async (req, res) => {
 // @desc Post A Episode
 // @access Public
 Router.post("/", async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
     try {
         const missingParams = [];
         const requiredEpisodeKeys = [
             'title',
             'description',
             'episode',
-            'poster',
             'video',
             'film',
         ];
-
 
         for (let key of requiredEpisodeKeys) {
             if (!req.body.hasOwnProperty(key)) {
@@ -45,33 +55,73 @@ Router.post("/", async (req, res) => {
             }
         }
 
-
         if (missingParams.length > 0) {
             return res.status(400).json({
                 error: `Missing parameters: ${missingParams.join(', ')}`,
             });
         }
 
+        if (!mongoose.Types.ObjectId.isValid(req.body.film)) {
+            console.error(`Invalid film ID: ${req.body.film}`);
+            return res.status(400).json({ error: `Invalid film ID: ${req.body.film}` });
+        }
+
         const film = await Film.findById(req.body.film);
         if (!film) {
             return res.status(404).json({ message: 'Film not found' });
         }
+
+        // Check title film exists
+        const existingEpisode = await Episode.findOne({ film: film._id, episode: req.body.episode });
+        if (existingEpisode) {
+            return res.status(400).json({ error: `There is already episode '${existingEpisode.episode}' in this film '${film.title}'` });
+        }
+        const episodeVideoInfo = await ytdl.getInfo(req.body.video);
+        const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url;
+        const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
+        const episodeThumbnailPath = path.join(filmPath, episodeThumbnailName);
+        const downloadPromise = axios.get(episodeThumbnailUrl, { responseType: 'arraybuffer' })
+            .then(response => {
+                const imageBuffer = Buffer.from(response.data);
+
+                return sharp(imageBuffer)
+                    .png()
+                    .toBuffer();
+            })
+            .then(pngBuffer => {
+                if (session.isActive()) {
+                    return fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
+                } else {
+                    throw new Error('Transaction rolled back, not saving thumbnail');
+                }
+            });
+
         const options = {
             lower: true,
             strict: true,
         };
-        let slug = req.body.title + " " + req.body.episode;
+        const slug = slugify(`${film.title} ${req.body.title} ${req.body.episode}`, options);
         const episode = new Episode({
             ...req.body,
-            slug: slugify(slug, options),
+            poster: episodeThumbnailPath,
+            slug,
         });
-        await episode.save()
-        film.episodes = film.episodes.push(episode._id);
-        // console.log(film.episodes)
-        await film.save();
+
+        const savePromise = episode.save()
+            .then(() => {
+                film.episodes = [...film.episodes, episode._id];
+                return film.save();
+            });
+
+        await Promise.all([downloadPromise, savePromise]);
+        await session.commitTransaction();
         res.status(201).json(episode);
     } catch (err) {
-        res.json(err);
+        console.error(err);
+        await session.abortTransaction();
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        session.endSession();
     }
 });
 
