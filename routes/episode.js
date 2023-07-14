@@ -36,7 +36,7 @@ Router.get("/", addFullUrl, async (req, res) => {
 // @route Post Episode
 // @desc Post A Episode
 // @access Public
-Router.post("/", async (req, res) => {
+Router.post("/", addFullUrl, async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
@@ -76,11 +76,20 @@ Router.post("/", async (req, res) => {
         if (existingEpisode) {
             return res.status(400).json({ error: `There is already episode '${existingEpisode.episode}' in this film '${film.title}'` });
         }
+        // Dowload video youtube and save it to folder
         const episodeVideoInfo = await ytdl.getInfo(req.body.video);
+        const episodeVideoName = `video-${uuidv4()}.mp4`;
+        const episodeVideoPath = path.join(filmPath, episodeVideoName);
+        const downloadVideoPromise = ytdl(req.body.video, {
+            format: 'mp4',
+            quality: 'highest',
+            filter: "audioandvideo",
+        }).pipe(fs.createWriteStream(episodeVideoPath));
+
         const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url;
         const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
         const episodeThumbnailPath = path.join(filmPath, episodeThumbnailName);
-        const downloadPromise = axios.get(episodeThumbnailUrl, { responseType: 'arraybuffer' })
+        const downloadThumbnailPromise = axios.get(episodeThumbnailUrl, { responseType: 'arraybuffer' })
             .then(response => {
                 const imageBuffer = Buffer.from(response.data);
 
@@ -88,12 +97,8 @@ Router.post("/", async (req, res) => {
                     .png()
                     .toBuffer();
             })
-            .then(pngBuffer => {
-                if (session.isActive()) {
-                    return fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
-                } else {
-                    throw new Error('Transaction rolled back, not saving thumbnail');
-                }
+            .then(async pngBuffer => {
+                return await fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
             });
 
         const options = {
@@ -104,6 +109,7 @@ Router.post("/", async (req, res) => {
         const episode = new Episode({
             ...req.body,
             poster: episodeThumbnailPath,
+            video: episodeVideoPath,
             slug,
         });
 
@@ -113,8 +119,10 @@ Router.post("/", async (req, res) => {
                 return film.save();
             });
 
-        await Promise.all([downloadPromise, savePromise]);
+        await Promise.all([downloadVideoPromise, downloadThumbnailPromise, savePromise]);
         await session.commitTransaction();
+        episode.poster = `${req.fullUrl}/${episode.poster}`;
+        episode.video = `${req.fullUrl}/${episode.video}`;
         res.status(201).json(episode);
     } catch (err) {
         console.error(err);
