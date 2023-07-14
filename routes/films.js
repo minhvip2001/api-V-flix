@@ -12,7 +12,8 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const ytdl = require('ytdl-core');
 const filmPath = path.join('uploads', 'films');
-const https = require('https');
+const axios = require('axios');
+const sharp = require('sharp');
 const { promisify } = require('util');
 
 
@@ -141,6 +142,8 @@ Router.post("/recent", authUser, async (req, res) => {
 // @desc Create A New Film
 // @access Public
 Router.post("/", addFullUrl, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const film = {
       'title': req.body.title,
@@ -230,42 +233,38 @@ Router.post("/", addFullUrl, async (req, res) => {
 
     const newEpisodes = await Promise.all(
       film.episodes.map(async (episode, index) => {
-        // Download video
         const episodeVideoInfo = await ytdl.getInfo(episode.video);
-        const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url
-        const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
-        const episodeThumbnail = path.join(filmPath, episodeThumbnailName);
-        https.get(episodeThumbnailUrl, (response) => {
-          response.pipe(fs.createWriteStream(episodeThumbnail, {
-            format: "png",
-          }));
-        });
-        const episodeTitle = slugify(episode.title, {
-          lower: true,
-          strict: true,
-        });
 
-        const videoFilename = `${episodeTitle}-${episode.episode}-${uuidv4()}.mp4`;
-        const videoPath = path.join(filmPath, videoFilename);
-        const videoStream = ytdl(episode.video);
-        videoStream
-          .pipe(fs.createWriteStream(videoPath, {
-            quality: "highest",
-            filter: "audioandvideo",
-            format: "mp4",
-          }))
-          .on('finish', function () {
-            console.log('Video film downloaded successfully');
+        // Download video
+        const episodeVideoName = `video-${uuidv4()}.mp4`;
+        const episodeVideoPath = path.join(filmPath, episodeVideoName);
+        ytdl(episode.video, {
+          format: 'mp4',
+          quality: 'highest',
+          filter: "audioandvideo",
+        }).pipe(fs.createWriteStream(episodeVideoPath));
+
+        // Download thumbnail
+        const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url;
+        const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
+        const episodeThumbnailPath = path.join(filmPath, episodeThumbnailName);
+        axios.get(episodeThumbnailUrl, { responseType: 'arraybuffer' })
+          .then(response => {
+            const imageBuffer = Buffer.from(response.data);
+
+            return sharp(imageBuffer)
+              .png()
+              .toBuffer();
           })
-          .on("error", (err) => {
-            console.error(`Error downloading file: ${err}`);
+          .then(async pngBuffer => {
+            return await fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
           });
 
         const slug = `${film.title} ${episode.title} ${episode.episode}`;
         const newEpisode = await Episode.create({
           ...episode,
-          poster: episodeThumbnail,
-          video: videoPath,
+          poster: episodeThumbnailPath,
+          video: episodeVideoPath,
           slug: slugify(slug, { lower: true, strict: true }),
           film: newFilm._id,
         });
@@ -282,10 +281,14 @@ Router.post("/", addFullUrl, async (req, res) => {
       episode.poster = `${req.fullUrl}/${episode.poster}`;
       episode.video = `${req.fullUrl}/${episode.video}`;
     });
+    await session.commitTransaction();
     res.json(newFilm);
   } catch (err) {
     console.error(err);
+    await session.abortTransaction();
     res.status(500).json({ error: "Server error" });
+  } finally {
+    session.endSession();
   }
 });
 
