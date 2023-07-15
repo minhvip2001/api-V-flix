@@ -267,4 +267,55 @@ Router.patch("/:id", addFullUrl, async (req, res) => {
     }
 });
 
+// @route Delete Episode
+// @desc Delete A Episode
+// @access Public
+Router.delete('/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            console.error(`Invalid episode ID: ${id}`);
+            return res.status(400).json({ error: `Invalid episode ID: ${id}` });
+        }
+
+        const episode = await Episode.findById(id);
+        if (!episode) {
+            return res.status(404).json({ message: 'Episode not found' });
+        }
+
+        // Remove the poster image file
+        if (episode.poster) {
+            if (fs.existsSync(path.join(episode.poster))) {
+                await unlinkAsync(path.join(episode.poster));
+            }
+        }
+
+        if (episode.video) {
+            if (fs.existsSync(path.join(episode.video))) {
+                await unlinkAsync(path.join(episode.video));
+            }
+        }
+
+        //   Delete the episode object
+        await episode.remove();
+
+        // Remove the episode reference from the film object
+        const film = await Film.findById(episode.film);
+        if (film) {
+            const index = film.episodes.indexOf(id);
+
+            if (index !== -1) {
+                film.episodes.splice(index, 1);
+                await film.save();
+            }
+        }
+
+        res.json({ message: 'Delete episode movie successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 module.exports = Router;
