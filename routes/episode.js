@@ -144,21 +144,6 @@ Router.patch("/:id", addFullUrl, async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const updates = Object.keys(req.body);
-        const allowedUpdates = [
-            "title",
-            "description",
-            "episode",
-            "video",
-        ];
-        const invalidUpdates = updates.filter((update) =>
-            !allowedUpdates.includes(update)
-        );
-
-        if (invalidUpdates.length > 0) {
-            return res.status(400).json({ error: "Invalid updates", invalidFields: invalidUpdates, allowUpdateFields: allowedUpdates });
-        }
-
         const id = req.params.id
         if (!mongoose.Types.ObjectId.isValid(id)) {
             console.error(`Invalid episode ID: ${id}`);
@@ -177,7 +162,7 @@ Router.patch("/:id", addFullUrl, async (req, res) => {
 
         // Check title film exists
         const existingEpisode = await Episode.findOne({ film: film._id, episode: req.body.episode });
-        if (id != existingEpisode._id) {
+        if (existingEpisode && id != existingEpisode._id) {
             if (existingEpisode) {
                 return res.status(400).json({ error: `There is already episode '${existingEpisode.episode}' in this film '${film.title}'` });
             }
@@ -197,37 +182,39 @@ Router.patch("/:id", addFullUrl, async (req, res) => {
         }
 
         // Dowload video youtube and save it to folder
-        const episodeVideoInfo = await ytdl.getInfo(req.body.video);
-        const episodeVideoName = `video-${uuidv4()}.mp4`;
-        const episodeVideoPath = path.join(filmPath, episodeVideoName);
-        const downloadVideoPromise = ytdl(req.body.video, {
-            format: 'mp4',
-            quality: 'highest',
-            filter: "audioandvideo",
-        }).pipe(fs.createWriteStream(episodeVideoPath));
+        if (req.body.video) {
+            const episodeVideoInfo = await ytdl.getInfo(req.body.video);
+            const episodeVideoName = `video-${uuidv4()}.mp4`;
+            const episodeVideoPath = path.join(filmPath, episodeVideoName);
+            var downloadVideoPromise = ytdl(req.body.video, {
+                format: 'mp4',
+                quality: 'highest',
+                filter: "audioandvideo",
+            }).pipe(fs.createWriteStream(episodeVideoPath));
 
-        const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url;
-        const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
-        const episodeThumbnailPath = path.join(filmPath, episodeThumbnailName);
-        const downloadThumbnailPromise = axios.get(episodeThumbnailUrl, { responseType: 'arraybuffer' })
-            .then(response => {
-                const imageBuffer = Buffer.from(response.data);
+            const episodeThumbnailUrl = episodeVideoInfo.videoDetails.thumbnails.slice(-1)[0].url;
+            const episodeThumbnailName = `thumbnail-${uuidv4()}.png`;
+            const episodeThumbnailPath = path.join(filmPath, episodeThumbnailName);
+            var downloadThumbnailPromise = axios.get(episodeThumbnailUrl, { responseType: 'arraybuffer' })
+                .then(response => {
+                    const imageBuffer = Buffer.from(response.data);
 
-                return sharp(imageBuffer)
-                    .png()
-                    .toBuffer();
-            })
-            .then(async pngBuffer => {
-                return await fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
-            });
+                    return sharp(imageBuffer)
+                        .png()
+                        .toBuffer();
+                })
+                .then(async pngBuffer => {
+                    return await fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
+                });
+            req.body.poster = episodeThumbnailPath;
+            req.body.video = episodeVideoPath;
+        }
 
         const slug = slugify(`${episode.film.title} ${req.body.title} ${req.body.episode}`, {
             lower: true,
             strict: true,
         });
         req.body.slug = slug;
-        req.body.poster = episodeThumbnailPath;
-        req.body.video = episodeVideoPath;
 
         // Update the film object with the request body
         Object.assign(episode, req.body);
