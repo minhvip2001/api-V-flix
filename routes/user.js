@@ -12,6 +12,7 @@ const client = new OAuth2Client(
 const cloudinary = require("../utils/cloudinary");
 const authAdmin = require("../middlewares/authAdmin");
 const nodemailer = require("nodemailer");
+const mongoose = require("mongoose");
 
 // @route GET Users
 // @desc Get Filter Users
@@ -369,7 +370,7 @@ Router.post("/register", async (req, res) => {
               lastChangePw: user.lastChangePw.toString(),
               userName: user.userName,
             },
-              process.env.JWT_SECRET,
+            process.env.JWT_SECRET,
             {
               expiresIn: 3600,
             },
@@ -676,6 +677,25 @@ Router.get("/deleteCookie", (req, res) => {
     .json({
       msg: "Logout success",
     });
+});
+
+Router.post("/history", async (req, res) => {
+    const token = req.signedCookies.tokenUser;
+    if (!token) {
+      return res.json({});
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    const episodeId = req.body.episodeId
+    if (!mongoose.Types.ObjectId.isValid(episodeId)) {
+      console.error(`Invalid episode ID: ${episodeId}`);
+      return res.status(400).json({ error: `Invalid episode ID: ${episodeId}` });
+  }
+    const newEpisodeHistory = { date: Date.now(), episodeId: episodeId };
+    user.history.push(newEpisodeHistory)
+    await user.save();
+    res.json({ "msg": `Add viewed episode ${episodeId} to history memory` });
+
 });
 
 module.exports = Router;
