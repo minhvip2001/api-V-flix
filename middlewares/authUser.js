@@ -27,6 +27,8 @@ const authUser = async (req, res, next) => {
 
     // Add admin from payload
     req.userId = id;
+    const user = await User.findById(id);
+    req.user = user
     next();
   } catch (err) {
     res.status(400).json({ msg: "Token không đúng" });

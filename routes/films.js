@@ -1,5 +1,7 @@
 const express = require("express");
+const User = require("../models/User");
 const Film = require("../models/Film");
+const jwt = require("jsonwebtoken");
 const Episode = require("../models/Episode");
 const addFullUrl = require("../utils/url");
 const Router = express.Router();
@@ -112,29 +114,108 @@ Router.get("/filter", async (req, res) => {
 // @route POST films recent
 // @desc POST Films Recent
 // @access Private
-Router.post("/recent", authUser, async (req, res) => {
+Router.get("/recent", authUser, addFullUrl, async (req, res) => {
   try {
-    const { history } = req.body;
-    const listIdFilm = history.map((item) =>
-      mongoose.Types.ObjectId(item.filmId)
-    );
-    const films = await Film.find({
-      _id: { $in: listIdFilm },
-      softDelete: false,
-    }).select(
-      "title posterFilm trailerURL filmURL genre actor description reviews slug"
-    );
-    const sortRecent = [];
-    for (let i = 0; i < history.length; i++) {
-      for (let j = 0; j < films.length; j++) {
-        if (history[i].filmId === films[j].id) {
-          sortRecent.push(films[j]);
+    const user = req.user;
+    // user.history.sort((a, b) => a.date - b.date);
+    const episodeTimestamps = user.history.reduce((acc, { episodeId, date }) => {
+      acc[episodeId] = date;
+      return acc;
+    }, {});
+
+    var listEpisodeObjects = await Episode.find({
+      _id: { $in: Object.keys(episodeTimestamps) },
+    });
+    const listEpisodes = [];
+    const listFilmIds = [];
+    listEpisodeObjects.map(item => {
+      if (episodeTimestamps.hasOwnProperty(item.id)) {
+        let episode = {
+          "_id": item._id,
+          "title": item.title,
+          "description": item.description,
+          "episode": item.episode,
+          "video": `${req.fullUrl}/${item.video}`,
+          "poster": `${req.fullUrl}/${item.poster}`,
+          "slug": item.slug,
+          "date": episodeTimestamps[item.id],
+          "film": item.film._id,
         }
+        listFilmIds.push(item.film._id);
+        listEpisodes.push(episode);
       }
+    });
+    const uniqueFilmIds = [...new Set(listFilmIds.map(item => item.toString()))];
+
+    var listFilmObjects = await Film.find({
+      _id: { $in: uniqueFilmIds },
+    });
+
+    const filmEpisodes = {};
+    const ListFilmEpisodes = [];
+
+    for (let episode of listEpisodes) {
+      const film = episode.film;
+      if (!filmEpisodes[film]) {
+        filmEpisodes[film] = [];
+        ListFilmEpisodes.push({ [film]: filmEpisodes[film] });
+      }
+      filmEpisodes[film].push(episode);
+      filmEpisodes[film].sort((a, b) => b.date - a.date);
     }
-    res.json(sortRecent);
-  } catch (err) {
-    console.log(err);
+
+    const listFilms = [];
+    listFilmObjects.map(film => {
+      if (filmEpisodes.hasOwnProperty(film.id)) {
+        let filmObj = {
+          "_id": film._id,
+          "title": film.title,
+          "titleSearch": film.titleSearch,
+          "poster": `${req.fullUrl}/${film.poster}`,
+          "description": film.description,
+          "actor": film.actor,
+          "genre": film.genre,
+          "reviews": film.reviews,
+          "slug": film.slug,
+          "date": film.date,
+          "episodes": filmEpisodes[film.id]
+        }
+        listFilms.push(filmObj);
+      }
+    });
+    const options = {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Ho_Chi_Minh' // Set the timezone to Vietnamese time
+    };
+    const sortedListFilms = listFilms.sort((a, b) => {
+      const latestDateA = Math.max(...a.episodes.map(ep => ep.date));
+      const latestDateB = Math.max(...b.episodes.map(ep => ep.date));
+      return latestDateB - latestDateA;
+    });
+    const modifiedList = sortedListFilms.map(obj => {
+      const modifiedEpisodes = obj.episodes.map(ep => {
+        const currentDate = new Date(ep.date);
+        const vietnameseDateTime = currentDate.toLocaleString('vi-VN', options);
+        const [time, date] = vietnameseDateTime.split(' ');
+        const [hour, minute, second] = time.split(':');
+        const [day, month, year] = date.split('/');
+
+        const formattedDateTime = `${day}-${month}-${year} ${hour}:${minute}:${second}`;
+
+        return { ...ep, date: formattedDateTime };
+      });
+      return { ...obj, episodes: modifiedEpisodes };
+    });
+    res.json(modifiedList);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
