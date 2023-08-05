@@ -63,17 +63,24 @@ Router.get("/", addFullUrl, async (req, res) => {
 Router.get("/related", async (req, res) => {
   try {
     const { slug } = req.query;
-    const film = await Film.findOne({ slug, softDelete: false });
+    if (!slug) {
+      return res.status(400).json({ message: 'Slug is required' });
+    }
+    const film = await Film.findOne({ slug, softDelete: false }).populate("episodes");
+    if (!film) {
+      return res.status(404).json({ message: 'Film not found' });
+    }
     const related = await Film.find({
       genre: { $in: [...film.genre] },
       softDelete: false,
-    }).limit(8);
+    }).populate("episodes").limit(8);
     res.json({
       film,
       related,
     });
   } catch (err) {
     console.log(err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
@@ -104,7 +111,7 @@ Router.get("/filter", async (req, res) => {
 
     const films = await Film.find(...filter).sort(
       q ? { score: { $meta: "textScore" } } : "-date"
-    );
+    ).populate("episodes");
     res.json(films);
   } catch (err) {
     console.log(err);
