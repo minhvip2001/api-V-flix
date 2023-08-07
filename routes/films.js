@@ -394,6 +394,7 @@ Router.patch("/:id", async (req, res) => {
       "genre",
       "actor",
       "reviews",
+      "softDelete",
     ];
     const invalidUpdates = updates.filter((update) =>
       !allowedUpdates.includes(update)
