@@ -33,7 +33,7 @@ const FilmSchema = new Schema({
     required: true,
   },
   reviews: {
-    type: [Number],
+    type: Array,
     default: [],
   },
   softDelete: {

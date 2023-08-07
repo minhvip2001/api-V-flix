@@ -214,7 +214,7 @@ Router.get("/recent", authUser, addFullUrl, async (req, res) => {
         const [day, month, year] = date.split('/');
 
         const formattedDateTime = `${day}-${month}-${year} ${hour}:${minute}:${second}`;
-
+        // delete ep.film;
         return { ...ep, date: formattedDateTime };
       });
       return { ...obj, episodes: modifiedEpisodes };
@@ -352,6 +352,7 @@ Router.post("/", addFullUrl, async (req, res) => {
         const newEpisode = await Episode.create({
           ...episode,
           poster: episodeThumbnailPath,
+          url: episode.video,
           video: episodeVideoPath,
           slug: slugify(slug, { lower: true, strict: true }),
           film: newFilm._id,
@@ -392,6 +393,7 @@ Router.patch("/:id", async (req, res) => {
       "poster",
       "genre",
       "actor",
+      "reviews",
     ];
     const invalidUpdates = updates.filter((update) =>
       !allowedUpdates.includes(update)
@@ -501,6 +503,28 @@ Router.delete("/:id", async (req, res) => {
     res.status(400).json({ success: false, err });
   }
 });
+
+Router.delete("/soft/:id", async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.error(`Invalid film ID: ${req.params.id}`);
+      return res.status(400).json({ error: `Invalid film ID: ${req.params.id}` });
+    }
+
+    const film = await Film.findByIdAndUpdate(req.params.id, { softDelete: true }, {
+      new: true,
+      runValidators: true,
+    }).populate("episodes");
+    if (!film) {
+      return res.status(404).json({ error: 'Film not found' });
+    }
+
+    return res.json({ message: 'Delete soft movie successfully' });
+  } catch (err) {
+    res.status(400).json({ success: false, err });
+  }
+});
+
 
 // @route GET slug
 // @desc Check Slug Exiting

@@ -692,7 +692,7 @@ Router.post("/history", async (req, res) => {
       return res.status(400).json({ error: `Invalid episode ID: ${episodeId}` });
   }
     const newEpisodeHistory = { date: Date.now(), episodeId: episodeId };
-    user.history.push(newEpisodeHistory)
+    user.history.unshift(newEpisodeHistory)
     await user.save();
     res.json({ "msg": `Add viewed episode ${episodeId} to history memory` });
 
