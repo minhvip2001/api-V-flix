@@ -207,6 +207,7 @@ Router.patch("/:id", addFullUrl, async (req, res) => {
                     return await fs.promises.writeFile(episodeThumbnailPath, pngBuffer);
                 });
             req.body.poster = episodeThumbnailPath;
+            req.body.url = req.body.video;
             req.body.video = episodeVideoPath;
         }
 
@@ -229,6 +230,7 @@ Router.patch("/:id", addFullUrl, async (req, res) => {
             "episode": episode.episode,
             "video": `${req.fullUrl}/${episode.video}`,
             "poster": `${req.fullUrl}/${episode.poster}`,
+            "url": episode.url,
             "slug": episode.slug,
             "date": episode.date,
             "film": {

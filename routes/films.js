@@ -125,7 +125,8 @@ Router.get("/recent", authUser, addFullUrl, async (req, res) => {
   try {
     const user = req.user;
     // user.history.sort((a, b) => a.date - b.date);
-    const episodeTimestamps = user.history.reduce((acc, { episodeId, date }) => {
+    const history = user.history;
+    const episodeTimestamps = history.reduce((acc, { episodeId, date }) => {
       acc[episodeId] = date;
       return acc;
     }, {});
