@@ -1,5 +1,5 @@
 const addFullUrl = (req, res, next) => {
-    req.fullUrl = process.env.REACT_APP_BASE_API_PREFIX;
+    req.fullUrl = process.env.SERVER_API_URL;
     next();
 };
 
