@@ -3,31 +3,16 @@ const User = require("../models/User");
 
 const authUser = async (req, res, next) => {
   try {
-    const token = req.signedCookies.tokenUser;
+    const token = req.header("Authorization")?.split(" ")[1];
     if (!token) {
-      return res
-        .status(401)
-        .json({ msg: "Không có token nào được định nghĩa" });
+      return res.status(401).json({ msg: "Không có token nào được định nghĩa" });
     }
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { id, lastChangePw } = decoded;
-    // const user = await User.findById(id);
-    // if (user.lastChangePw.toString() !== lastChangePw) {
-    //   return res
-    //     .status(401)
-    //     .clearCookie("tokenUser", {
-    //       sameSite: "none",
-    //       secure: true,
-    //     })
-    //     .json({
-    //       msg: "Mật khẩu đã bị thay đổi",
-    //     });
-    // }
-
     // Add admin from payload
     req.userId = id;
-    const user = await User.findById(id);
+    const user = await User.findById(id).select('-userPassword -lastChangePw');
     req.user = user
     next();
   } catch (err) {

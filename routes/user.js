@@ -90,15 +90,6 @@ Router.post("/auth", async (req, res) => {
       { expiresIn: 3600 * 24 },
       (err, token) => {
         if (err) throw err;
-        if (!req.signedCookies.tokenUser) {
-          res.cookie("tokenUser", token, {
-            maxAge: 3600 * 24 * 1000,
-            signed: true,
-            httpOnly: true,
-            sameSite: "none",
-            secure: true,
-          });
-        }
         res.json({
           _id: userExisting.id,
           userName: userExisting.userName,
