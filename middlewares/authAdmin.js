@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 
 const authAdmin = (req, res, next) => {
-  const token = req.signedCookies.tokenAdmin;
+  const token = req.header("Authorization")?.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({ msg: "Không có token nào được định nghĩa" });
