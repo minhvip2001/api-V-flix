@@ -420,16 +420,16 @@ Router.patch("/forgotPassword", async (req, res) => {
       port: 465,
       secure: true,
       auth: {
-        user: "vmoflix.sp@gmail.com",
-        pass: process.env.PASSWORD_EMAIL_SUPPORT,
+        user: process.env.MAIL_USERNAME,
+        pass: process.env.MAIL_PASSWORD,
       },
       tls: {
         rejectUnauthorized: false,
       },
     });
-    const url = `https://vmoflix-vn.web.app/reset-password/${token}`;
+    const url = `${process.env.NODE_ENV !== 'production' ? "http://localhost:5000" : process.env.LINK_RESET_PASSWORD}/reset-password/${token}`;
     var mainOptions = {
-      from: "VMOflix Support <vmoflix.sp@gmail.com>",
+      from: "VMOflix Support",
       to: email,
       subject: "Yêu cầu khôi phục mật khẩu",
       html: `
@@ -512,8 +512,8 @@ Router.patch("/resetPassword", async (req, res) => {
                   port: 465,
                   secure: true,
                   auth: {
-                    user: "vmoflix.sp@gmail.com",
-                    pass: "vmoflix2021",
+                    user: process.env.MAIL_USERNAME,
+                    pass: process.env.MAIL_PASSWORD,
                   },
                   tls: {
                     rejectUnauthorized: false,
@@ -521,7 +521,7 @@ Router.patch("/resetPassword", async (req, res) => {
                 });
                 const currentDate = new Date();
                 var mainOptions = {
-                  from: "VMOflix Support <vmoflix.sp@gmail.com>",
+                  from: "VMOflix Support",
                   to: user.userEmail,
                   subject: "Mật khẩu đã được thay đổi",
                   html: `
