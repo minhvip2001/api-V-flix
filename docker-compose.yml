@@ -1,0 +1,25 @@
+version: "3"
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # volumes:
+    #   - ./:/app
+    ports:
+      - "9000:9000"
+    env_file:
+      - .env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+  #   depends_on:
+  #     - mongo
+  # mongo:
+  #   image: mongo
+
+  nginx:
+    build: ./nginx
+    ports:
+    - '80:80'
+    depends_on:
+      - app
