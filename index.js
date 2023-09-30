@@ -49,9 +49,7 @@ app.use("/api/subscription", require("./routes/subscription"));
 app.use("/api/file", require("./routes/file"));
 
 // app.use("/", require("./routes/dumpData"));
-
-console.log('sssssssssssss');
-const port = process.env.PORT_SERVE || 9000;
+const port = process.env.PORT_SERVER || 9000;
 app.listen(port, () => {
   console.log(`Server :: Running @ 'http://localhost:${port}'`);
 });

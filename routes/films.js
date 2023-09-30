@@ -35,7 +35,6 @@ Router.get("/amount", authAdmin, async (req, res) => {
 Router.get("/", addFullUrl, async (req, res) => {
   try {
     const { slug } = req.query;
-
     const film = await Film.findOne({ slug: slug })
       .populate('episodes')
       .exec();
